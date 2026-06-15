@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import AppFooter from "@/components/live/AppFooter.vue";
+import AppHeader from "@/components/live/AppHeader.vue";
 import LiveSidebar from "@/components/live/LiveSidebar.vue";
-import VideoStage from "@/components/live/VideoStage.vue";
+import MainContent from "@/components/live/MainContent.vue";
 import { MAX_DISPLAY_NAME_LENGTH, PLAYBACK_DRIFT_TOLERANCE_SECONDS } from "@/shared/config";
 import type { CreateCommentInput, CreateVoteInput, Profile } from "@/shared/schemas";
 import type { LiveSnapshot } from "@/shared/types";
@@ -191,36 +193,40 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<main class="min-h-screen bg-[#f7f7f2] text-foreground lg:h-screen lg:overflow-hidden">
-		<div class="mx-auto grid min-h-screen max-w-7xl grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
-			<VideoStage
-				v-model:video-element="videoElement"
+	<div class="min-h-screen bg-[#f7f7f2] text-foreground">
+		<AppHeader />
+		<main class="lg:h-[calc(100vh-121px)] lg:overflow-hidden">
+			<div class="grid min-h-[calc(100vh-121px)] grid-cols-1 gap-0 lg:h-full lg:grid-cols-[minmax(0,1fr)_380px]">
+				<MainContent
+					v-model:video-element="videoElement"
 				:current-video="currentVideo"
 				:is-muted="isMuted"
 				:is-playing="isPlaying"
-				:next-video="nextVideo"
-				:volume="volume"
-				@enter-fullscreen="enterFullscreen"
-				@toggle-muted="toggleMuted"
-				@toggle-playback="togglePlayback"
-				@update:volume="volume = $event"
-				@video-ended="refreshSnapshot"
-				@video-ready="syncVideo"
-			/>
+				:snapshot="snapshot"
+					:volume="volume"
+					@enter-fullscreen="enterFullscreen"
+					@toggle-muted="toggleMuted"
+					@toggle-playback="togglePlayback"
+					@update:volume="volume = $event"
+					@vote="submitVote"
+					@video-ended="refreshSnapshot"
+					@video-ready="syncVideo"
+				/>
 
-			<LiveSidebar
+				<LiveSidebar
 				:comment-body="commentBody"
 				:display-name="displayName"
 				:error-message="errorMessage"
-				:next-video="nextVideo"
 				:profile="profile"
-				:snapshot="snapshot"
-				@save-profile="saveProfile"
-				@submit-comment="submitComment"
-				@update:comment-body="commentBody = $event"
-				@update:display-name="displayName = $event"
-				@vote="submitVote"
-			/>
-		</div>
-	</main>
+					:snapshot="snapshot"
+					@save-profile="saveProfile"
+					@submit-comment="submitComment"
+					@update:comment-body="commentBody = $event"
+					@update:display-name="displayName = $event"
+					@vote="submitVote"
+				/>
+			</div>
+		</main>
+		<AppFooter />
+	</div>
 </template>
