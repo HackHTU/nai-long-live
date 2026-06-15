@@ -4,7 +4,12 @@ import AppFooter from "@/components/live/AppFooter.vue";
 import AppHeader from "@/components/live/AppHeader.vue";
 import LiveSidebar from "@/components/live/LiveSidebar.vue";
 import MainContent from "@/components/live/MainContent.vue";
-import { MAX_DISPLAY_NAME_LENGTH, PLAYBACK_DRIFT_TOLERANCE_SECONDS } from "@/shared/config";
+import {
+	MAX_DISPLAY_NAME_LENGTH,
+	PLAYBACK_HARD_SYNC_SECONDS,
+	PLAYBACK_SOFT_SYNC_SECONDS,
+	PLAYBACK_START_GRACE_SECONDS,
+} from "@/shared/config";
 import type { CreateCommentInput, CreateVoteInput, Profile } from "@/shared/schemas";
 import type { LiveSnapshot } from "@/shared/types";
 import type { VideoItem } from "@/shared/videos";
@@ -14,9 +19,10 @@ const profile = ref<Profile>(loadProfile());
 const displayName = ref(profile.value.name);
 const commentBody = ref("");
 const isPlaying = ref(true);
-const isMuted = ref(false);
+const isMuted = ref(true);
 const volume = ref(0.8);
 const errorMessage = ref("");
+const playbackPrompt = ref("");
 const videoElement = ref<HTMLVideoElement | null>(null);
 const pollTimer = ref<number | null>(null);
 const pendingPlayTimer = ref<number | null>(null);
@@ -65,7 +71,7 @@ async function refreshSnapshot() {
 		throw new Error("无法连接直播间");
 	}
 	snapshot.value = await response.json();
-	await syncVideo({ allowPlay: false });
+	await syncVideo({ mode: "poll" });
 }
 
 async function postJson<T>(url: string, body: T) {
@@ -111,12 +117,23 @@ async function submitVote(video: VideoItem) {
 	}
 }
 
-async function syncVideo(options: { allowPlay?: boolean } = {}) {
-	await nextTick();
-	const element = videoElement.value;
+function getTargetTime() {
 	const state = snapshot.value?.playback;
 	const video = currentVideo.value;
-	if (!element || !state || !video || !state.startedAt) {
+	if (!state || !video || !state.startedAt) {
+		return null;
+	}
+
+	const serverElapsed = (state.serverNow - state.startedAt) / 1000;
+	const localElapsed = (Date.now() - state.serverNow) / 1000;
+	return Math.max(0, Math.min(video.durationSeconds - 0.1, serverElapsed + localElapsed));
+}
+
+async function syncVideo(options: { mode: "initial" | "switch" | "ready" | "poll" | "manual" }) {
+	await nextTick();
+	const element = videoElement.value;
+	const targetTime = getTargetTime();
+	if (!element || targetTime === null) {
 		return;
 	}
 
@@ -125,18 +142,27 @@ async function syncVideo(options: { allowPlay?: boolean } = {}) {
 	element.playsInline = true;
 	element.autoplay = true;
 
-	const serverElapsed = (state.serverNow - state.startedAt) / 1000;
-	const localElapsed = (Date.now() - state.serverNow) / 1000;
-	const targetTime = Math.max(
-		0,
-		Math.min(video.durationSeconds - 0.1, serverElapsed + localElapsed),
-	);
+	const drift = targetTime - element.currentTime;
+	const absDrift = Math.abs(drift);
+	const shouldPrime =
+		options.mode === "initial" || options.mode === "switch" || options.mode === "ready";
+	const withinStartupGrace =
+		options.mode === "ready" && element.currentTime <= PLAYBACK_START_GRACE_SECONDS;
 
-	if (Math.abs(element.currentTime - targetTime) > PLAYBACK_DRIFT_TOLERANCE_SECONDS) {
+	if (shouldPrime || absDrift >= PLAYBACK_HARD_SYNC_SECONDS || withinStartupGrace) {
 		element.currentTime = targetTime;
+		element.playbackRate = 1;
+	} else if (absDrift >= PLAYBACK_SOFT_SYNC_SECONDS) {
+		element.playbackRate = drift > 0 ? 1.06 : 0.94;
+	} else {
+		element.playbackRate = 1;
 	}
 
-	if (isPlaying.value && options.allowPlay) {
+	if (isPlaying.value && options.mode === "poll" && element.paused) {
+		await ensurePlayback();
+	}
+
+	if (isPlaying.value && options.mode !== "poll") {
 		await ensurePlayback();
 	}
 }
@@ -152,8 +178,10 @@ async function ensurePlayback(attempt = 0) {
 
 	try {
 		await element.play();
+		playbackPrompt.value = "";
 	} catch {
 		if (attempt >= 4 || !isPlaying.value) {
+			playbackPrompt.value = "点击播放";
 			return;
 		}
 		if (pendingPlayTimer.value) {
@@ -169,7 +197,7 @@ async function ensurePlayback(attempt = 0) {
 }
 
 async function handleVideoReady() {
-	await syncVideo();
+	await syncVideo({ mode: "ready" });
 }
 
 function togglePlayback() {
@@ -180,7 +208,8 @@ function togglePlayback() {
 
 	if (element.paused) {
 		isPlaying.value = true;
-		void syncVideo({ allowPlay: true });
+		playbackPrompt.value = "";
+		void syncVideo({ mode: "manual" });
 	} else {
 		isPlaying.value = false;
 		element.pause();
@@ -189,9 +218,22 @@ function togglePlayback() {
 
 function toggleMuted() {
 	isMuted.value = !isMuted.value;
+	if (!isMuted.value) {
+		playbackPrompt.value = "";
+	}
 	if (videoElement.value) {
 		videoElement.value.muted = isMuted.value;
 	}
+}
+
+async function startPlaybackWithSound() {
+	isPlaying.value = true;
+	isMuted.value = false;
+	playbackPrompt.value = "";
+	if (videoElement.value) {
+		videoElement.value.muted = false;
+	}
+	await syncVideo({ mode: "manual" });
 }
 
 function enterFullscreen() {
@@ -217,7 +259,7 @@ watch(currentVideoId, (videoId, previousVideoId) => {
 			}
 			element.load();
 		}
-		void syncVideo({ allowPlay: true });
+		void syncVideo({ mode: previousVideoId ? "switch" : "initial" });
 	});
 });
 
@@ -248,12 +290,14 @@ onUnmounted(() => {
 			<div class="grid min-h-[calc(100vh-121px)] grid-cols-1 gap-0 lg:h-full lg:grid-cols-[minmax(0,1fr)_460px]">
 				<MainContent
 					v-model:video-element="videoElement"
-				:current-video="currentVideo"
-				:is-muted="isMuted"
-				:is-playing="isPlaying"
-				:snapshot="snapshot"
+					:current-video="currentVideo"
+					:is-muted="isMuted"
+					:is-playing="isPlaying"
+					:playback-prompt="playbackPrompt"
+					:snapshot="snapshot"
 					:volume="volume"
 					@enter-fullscreen="enterFullscreen"
+					@start-with-sound="startPlaybackWithSound"
 					@toggle-muted="toggleMuted"
 					@toggle-playback="togglePlayback"
 					@update:volume="volume = $event"
@@ -263,10 +307,10 @@ onUnmounted(() => {
 				/>
 
 				<LiveSidebar
-				:comment-body="commentBody"
-				:display-name="displayName"
-				:error-message="errorMessage"
-				:profile="profile"
+					:comment-body="commentBody"
+					:display-name="displayName"
+					:error-message="errorMessage"
+					:profile="profile"
 					:snapshot="snapshot"
 					@save-profile="saveProfile"
 					@submit-comment="submitComment"

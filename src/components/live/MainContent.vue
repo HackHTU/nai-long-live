@@ -9,6 +9,7 @@ defineProps<{
 	currentVideo: VideoItem | null;
 	isPlaying: boolean;
 	isMuted: boolean;
+	playbackPrompt: string;
 	volume: number;
 }>();
 
@@ -19,6 +20,7 @@ const emit = defineEmits<{
 	"toggle-playback": [];
 	"toggle-muted": [];
 	"enter-fullscreen": [];
+	"start-with-sound": [];
 	"update:volume": [value: number];
 }>();
 
@@ -42,8 +44,10 @@ const videoElement = defineModel<HTMLVideoElement | null>("videoElement", {
 			:current-video="currentVideo"
 			:is-muted="isMuted"
 			:is-playing="isPlaying"
+			:playback-prompt="playbackPrompt"
 			:volume="volume"
 			@enter-fullscreen="emit('enter-fullscreen')"
+			@start-with-sound="emit('start-with-sound')"
 			@toggle-muted="emit('toggle-muted')"
 			@toggle-playback="emit('toggle-playback')"
 			@update:volume="emit('update:volume', $event)"
