@@ -21,9 +21,10 @@ const videoElement = ref<HTMLVideoElement | null>(null);
 const pollTimer = ref<number | null>(null);
 const pendingPlayTimer = ref<number | null>(null);
 
+const currentVideoId = computed(() => snapshot.value?.playback.videoId ?? null);
+
 const currentVideo = computed(() => {
-	const currentId = snapshot.value?.playback.videoId;
-	return snapshot.value?.videos.find((video) => video.id === currentId) ?? null;
+	return snapshot.value?.videos.find((video) => video.id === currentVideoId.value) ?? null;
 });
 
 const nextVideo = computed(() => {
@@ -64,7 +65,7 @@ async function refreshSnapshot() {
 		throw new Error("无法连接直播间");
 	}
 	snapshot.value = await response.json();
-	await syncVideo();
+	await syncVideo({ allowPlay: false });
 }
 
 async function postJson<T>(url: string, body: T) {
@@ -110,7 +111,7 @@ async function submitVote(video: VideoItem) {
 	}
 }
 
-async function syncVideo() {
+async function syncVideo(options: { allowPlay?: boolean } = {}) {
 	await nextTick();
 	const element = videoElement.value;
 	const state = snapshot.value?.playback;
@@ -135,7 +136,7 @@ async function syncVideo() {
 		element.currentTime = targetTime;
 	}
 
-	if (isPlaying.value) {
+	if (isPlaying.value && options.allowPlay) {
 		await ensurePlayback();
 	}
 }
@@ -179,7 +180,7 @@ function togglePlayback() {
 
 	if (element.paused) {
 		isPlaying.value = true;
-		void syncVideo().then(() => ensurePlayback());
+		void syncVideo({ allowPlay: true });
 	} else {
 		isPlaying.value = false;
 		element.pause();
@@ -203,13 +204,20 @@ watch(volume, (value) => {
 	}
 });
 
-watch(currentVideo, () => {
+watch(currentVideoId, (videoId, previousVideoId) => {
+	if (videoId === previousVideoId) {
+		return;
+	}
 	void nextTick(() => {
 		const element = videoElement.value;
 		if (element) {
+			if (pendingPlayTimer.value) {
+				window.clearTimeout(pendingPlayTimer.value);
+				pendingPlayTimer.value = null;
+			}
 			element.load();
 		}
-		void syncVideo().then(() => ensurePlayback());
+		void syncVideo({ allowPlay: true });
 	});
 });
 
