@@ -30,7 +30,7 @@ const videoElement = defineModel<HTMLVideoElement | null>("videoElement", {
 				<video
 					v-if="currentVideo"
 					ref="videoElement"
-					class="h-full w-full object-cover"
+					class="h-full w-full object-contain"
 					:key="currentVideo.id"
 					:src="currentVideo.url"
 					:muted="isMuted"

@@ -237,7 +237,7 @@ onUnmounted(() => {
 	<div class="min-h-screen bg-[#f7f7f2] text-foreground">
 		<AppHeader />
 		<main class="lg:h-[calc(100vh-121px)] lg:overflow-hidden">
-			<div class="grid min-h-[calc(100vh-121px)] grid-cols-1 gap-0 lg:h-full lg:grid-cols-[minmax(0,1fr)_380px]">
+			<div class="grid min-h-[calc(100vh-121px)] grid-cols-1 gap-0 lg:h-full lg:grid-cols-[minmax(0,1fr)_460px]">
 				<MainContent
 					v-model:video-element="videoElement"
 				:current-video="currentVideo"
