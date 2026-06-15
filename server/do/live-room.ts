@@ -168,7 +168,7 @@ export class LiveRoom extends DurableObject<Env> {
 			.exec<{ id: number; videoId: string }>(
 				"SELECT id, video_id as videoId FROM votes WHERE consumed_at IS NULL ORDER BY id ASC LIMIT 1",
 			)
-			.one();
+			.toArray()[0];
 
 		if (!next || !getVideoById(next.videoId)) {
 			this.ctx.storage.sql.exec(

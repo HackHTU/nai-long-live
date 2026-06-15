@@ -10,7 +10,7 @@
 		"build-only": "vite build",
 		"check": "biome check .",
 		"format": "biome check --write .",
-		"test": "vitest",
+		"test": "vitest run",
 		"type-check": "vue-tsc --build",
 		"deploy": "bun run build && wrangler deploy",
 		"cf-typegen": "wrangler types"
