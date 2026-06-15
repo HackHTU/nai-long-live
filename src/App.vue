@@ -38,6 +38,11 @@ const nextVideo = computed(() => {
 	return snapshot.value?.videos.find((video) => video.id === nextVote?.videoId) ?? null;
 });
 
+const onlineCount = computed(() => {
+	const names = new Set(snapshot.value?.comments.map((comment) => comment.authorName) ?? []);
+	return Math.max(1, names.size);
+});
+
 function loadProfile(): Profile {
 	const saved = localStorage.getItem("nai-long-profile");
 	if (saved) {
@@ -285,7 +290,7 @@ onUnmounted(() => {
 
 <template>
 	<div class="min-h-screen bg-[#f7f7f2] text-foreground">
-		<AppHeader />
+		<AppHeader :online-count="onlineCount" />
 		<main class="lg:h-[calc(100vh-121px)] lg:overflow-hidden">
 			<div class="grid min-h-[calc(100vh-121px)] grid-cols-1 gap-0 lg:h-full lg:grid-cols-[minmax(0,1fr)_460px]">
 				<MainContent
