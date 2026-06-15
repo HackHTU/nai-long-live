@@ -19,6 +19,7 @@ const volume = ref(0.8);
 const errorMessage = ref("");
 const videoElement = ref<HTMLVideoElement | null>(null);
 const pollTimer = ref<number | null>(null);
+const pendingPlayTimer = ref<number | null>(null);
 
 const currentVideo = computed(() => {
 	const currentId = snapshot.value?.playback.videoId;
@@ -120,6 +121,8 @@ async function syncVideo() {
 
 	element.volume = volume.value;
 	element.muted = isMuted.value;
+	element.playsInline = true;
+	element.autoplay = true;
 
 	const serverElapsed = (state.serverNow - state.startedAt) / 1000;
 	const localElapsed = (Date.now() - state.serverNow) / 1000;
@@ -133,10 +136,39 @@ async function syncVideo() {
 	}
 
 	if (isPlaying.value) {
-		await element.play().catch(() => {
-			isPlaying.value = false;
-		});
+		await ensurePlayback();
 	}
+}
+
+async function ensurePlayback(attempt = 0) {
+	const element = videoElement.value;
+	if (!element || !isPlaying.value) {
+		return;
+	}
+
+	element.muted = isMuted.value;
+	element.playsInline = true;
+
+	try {
+		await element.play();
+	} catch {
+		if (attempt >= 4 || !isPlaying.value) {
+			return;
+		}
+		if (pendingPlayTimer.value) {
+			window.clearTimeout(pendingPlayTimer.value);
+		}
+		pendingPlayTimer.value = window.setTimeout(
+			() => {
+				void ensurePlayback(attempt + 1);
+			},
+			150 * (attempt + 1),
+		);
+	}
+}
+
+async function handleVideoReady() {
+	await syncVideo();
 }
 
 function togglePlayback() {
@@ -147,7 +179,7 @@ function togglePlayback() {
 
 	if (element.paused) {
 		isPlaying.value = true;
-		void syncVideo();
+		void syncVideo().then(() => ensurePlayback());
 	} else {
 		isPlaying.value = false;
 		element.pause();
@@ -172,7 +204,13 @@ watch(volume, (value) => {
 });
 
 watch(currentVideo, () => {
-	void syncVideo();
+	void nextTick(() => {
+		const element = videoElement.value;
+		if (element) {
+			element.load();
+		}
+		void syncVideo().then(() => ensurePlayback());
+	});
 });
 
 onMounted(async () => {
@@ -188,6 +226,9 @@ onMounted(async () => {
 onUnmounted(() => {
 	if (pollTimer.value) {
 		window.clearInterval(pollTimer.value);
+	}
+	if (pendingPlayTimer.value) {
+		window.clearTimeout(pendingPlayTimer.value);
 	}
 });
 </script>
@@ -210,7 +251,7 @@ onUnmounted(() => {
 					@update:volume="volume = $event"
 					@vote="submitVote"
 					@video-ended="refreshSnapshot"
-					@video-ready="syncVideo"
+					@video-ready="handleVideoReady"
 				/>
 
 				<LiveSidebar

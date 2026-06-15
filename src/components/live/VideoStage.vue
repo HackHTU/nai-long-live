@@ -24,17 +24,20 @@ const videoElement = defineModel<HTMLVideoElement | null>("videoElement", {
 </script>
 
 <template>
-	<section class="flex min-h-[70vh] flex-1 items-center justify-center bg-[#101114] p-3 lg:min-h-0 lg:p-6">
-		<div class="flex h-full w-full max-w-[min(520px,calc((100vh-260px)*9/16))] flex-col overflow-hidden rounded-lg bg-[#17181c] shadow-2xl">
-			<div class="relative aspect-[9/16] w-full overflow-hidden bg-black">
+	<section class="flex min-h-[70vh] flex-1 bg-[#101114] p-3 lg:min-h-0 lg:p-6">
+		<div class="flex h-full w-full flex-col overflow-hidden rounded-lg bg-[#17181c] shadow-2xl">
+			<div class="relative min-h-0 flex-1 overflow-hidden bg-black">
 				<video
 					v-if="currentVideo"
 					ref="videoElement"
 					class="h-full w-full object-cover"
+					:key="currentVideo.id"
 					:src="currentVideo.url"
 					:muted="isMuted"
 					playsinline
 					autoplay
+					preload="auto"
+					webkit-playsinline
 					@loadedmetadata="emit('video-ready')"
 					@ended="emit('video-ended')"
 				/>
